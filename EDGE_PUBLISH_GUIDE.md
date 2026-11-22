@@ -50,7 +50,7 @@ mkdir -p dist
 zip -r dist/e-deli-0.1.0.zip \
   manifest.json background.js content.js store.js digest.js \
   theme.css popup.html popup.js manage.html manage.css manage.js \
-  icons/ -x "*.DS_Store"
+  icons/ _locales/ -x "*.DS_Store"
 ```
 
 ---

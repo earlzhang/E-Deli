@@ -1,0 +1,14 @@
+{
+  "extName": {
+    "message": "E-Deli"
+  },
+  "extDescription": {
+    "message": "del.icio.us 风格链接收藏：标签 + 备注一键收藏，按天/按周导出 Markdown 汇总。"
+  },
+  "actionTitle": {
+    "message": "E-Deli 收藏"
+  },
+  "commandSaveDesc": {
+    "message": "收藏当前页面到 E-Deli"
+  }
+}

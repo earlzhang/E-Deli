@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "E-Deli",
+  "name": "__MSG_extName__",
   "version": "0.1.0",
-  "description": "del.icio.us 风格链接收藏：标签 + 备注一键收藏，按天/按周导出 Markdown 汇总。",
+  "default_locale": "zh_CN",
+  "description": "__MSG_extDescription__",
   "permissions": ["storage", "contextMenus", "downloads", "activeTab", "clipboardWrite"],
   "background": { "service_worker": "background.js" },
   "content_scripts": [
@@ -20,13 +21,13 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "E-Deli 收藏",
+    "default_title": "__MSG_actionTitle__",
     "default_icon": "icons/icon32.png"
   },
   "commands": {
     "save-page": {
       "suggested_key": { "default": "Alt+D" },
-      "description": "收藏当前页面到 E-Deli"
+      "description": "__MSG_commandSaveDesc__"
     }
   }
 }

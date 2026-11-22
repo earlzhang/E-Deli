@@ -1,0 +1,14 @@
+{
+  "extName": {
+    "message": "E-Deli"
+  },
+  "extDescription": {
+    "message": "del.icio.us-style local-first bookmarking: save links with tags and notes, and export daily or weekly Markdown digests."
+  },
+  "actionTitle": {
+    "message": "Save to E-Deli"
+  },
+  "commandSaveDesc": {
+    "message": "Save current page to E-Deli"
+  }
+}
