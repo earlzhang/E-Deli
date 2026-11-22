@@ -1,0 +1,255 @@
+/* theme.css — E-Deli 暖纸知识库视觉系统（浅色默认 + 深色自适应/手动切换） */
+:root {
+  color-scheme: light;
+  --bg-canvas: #F6F3EC;
+  --bg-sidebar: #EFECE3;
+  --bg-surface: #FFFDF9;
+  --bg-subtle: #EAE5DA;
+  --bg-hover: #E4DEC9;
+  --bg-quote: #FBF7EE;
+
+  --text-primary: #1E1D1A;
+  --text-secondary: #5C574F;
+  --text-muted: #8A8479;
+
+  --border: #E2DDD2;
+  --border-strong: #CCC5B7;
+
+  --accent: #1D4ED8;
+  --accent-hover: #1E40AF;
+  --accent-soft: #EBF1FD;
+  --accent-text: #1D4ED8;
+
+  --amber: #B45309;
+  --amber-soft: #FEF3C7;
+  --amber-border: #D97706;
+
+  --wx-green: #078044;
+  --wx-soft: #E7F6EE;
+
+  --danger: #B91C1C;
+  --danger-soft: #FEE2E2;
+  --success: #15803D;
+  --success-soft: #DCFCE7;
+
+  --shadow-sm: 0 1px 2px rgba(30, 29, 26, 0.05);
+  --shadow-md: 0 4px 16px rgba(30, 29, 26, 0.08);
+  --shadow-lg: 0 12px 32px rgba(30, 29, 26, 0.14);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-canvas: #181715;
+  --bg-sidebar: #141311;
+  --bg-surface: #22201D;
+  --bg-subtle: #2B2925;
+  --bg-hover: #35322D;
+  --bg-quote: #27231C;
+
+  --text-primary: #EAE6DF;
+  --text-secondary: #B5AEA4;
+  --text-muted: #7D776E;
+
+  --border: #33302A;
+  --border-strong: #46423A;
+
+  --accent: #60A5FA;
+  --accent-hover: #93C5FD;
+  --accent-soft: rgba(59, 130, 246, 0.16);
+  --accent-text: #93C5FD;
+
+  --amber: #FBBF24;
+  --amber-soft: rgba(245, 158, 11, 0.16);
+  --amber-border: #D97706;
+
+  --wx-green: #34D399;
+  --wx-soft: rgba(16, 185, 129, 0.14);
+
+  --danger: #F87171;
+  --danger-soft: rgba(239, 68, 68, 0.16);
+  --success: #4ADE80;
+  --success-soft: rgba(34, 197, 94, 0.16);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.5);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font: 13.5px/1.6 var(--font-sans);
+  color: var(--text-primary);
+  background: var(--bg-canvas);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent-text);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+/* 基础按钮 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  white-space: nowrap;
+}
+.btn:hover {
+  background: var(--bg-subtle);
+  border-color: var(--text-muted);
+}
+.btn:active {
+  transform: translateY(0.5px);
+}
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.btn-primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: #fff;
+}
+.btn-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-secondary);
+}
+.btn-ghost:hover {
+  background: var(--bg-subtle);
+  border-color: transparent;
+  color: var(--text-primary);
+}
+.btn-danger {
+  color: var(--danger);
+  border-color: var(--border-strong);
+  background: var(--bg-surface);
+}
+.btn-danger:hover {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+}
+.btn-sm {
+  padding: 4px 9px;
+  font-size: 12px;
+}
+.btn-icon {
+  padding: 6px;
+  width: 30px;
+  height: 30px;
+}
+
+/* 输入框 */
+.input,
+.textarea {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--text-muted);
+}
+.input:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.textarea {
+  resize: vertical;
+  line-height: 1.55;
+}
+
+/* 标签胶囊 */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.14s ease;
+}
+.chip:hover {
+  border-color: var(--accent);
+  color: var(--accent-text);
+  background: var(--accent-soft);
+}
+.chip.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.chip.on:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: #fff;
+}
+.chip .n {
+  opacity: 0.7;
+  font-size: 11px;
+}
+.chip .x {
+  margin-left: 2px;
+  opacity: 0.55;
+  font-size: 13px;
+  line-height: 1;
+}
+.chip .x:hover {
+  opacity: 1;
+}
+
+/* 轻微自定义滚动条 */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
