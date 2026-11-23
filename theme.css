@@ -17,6 +17,8 @@
 
   --accent: #1D4ED8;
   --accent-hover: #1E40AF;
+  --accent-btn: #1D4ED8;
+  --accent-btn-hover: #1E40AF;
   --accent-soft: #EBF1FD;
   --accent-text: #1D4ED8;
 
@@ -61,6 +63,8 @@
 
   --accent: #60A5FA;
   --accent-hover: #93C5FD;
+  --accent-btn: #2563EB;
+  --accent-btn-hover: #3B82F6;
   --accent-soft: rgba(59, 130, 246, 0.16);
   --accent-text: #93C5FD;
 
@@ -126,14 +130,19 @@ a:hover {
 .btn:active {
   transform: translateY(0.5px);
 }
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 .btn-primary {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-btn);
+  border-color: var(--accent-btn);
   color: #fff;
 }
 .btn-primary:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
+  background: var(--accent-btn-hover);
+  border-color: var(--accent-btn-hover);
   color: #fff;
 }
 .btn-ghost {
@@ -215,13 +224,13 @@ a:hover {
   background: var(--accent-soft);
 }
 .chip.on {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--accent-btn);
+  border-color: var(--accent-btn);
   color: #fff;
 }
 .chip.on:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
+  background: var(--accent-btn-hover);
+  border-color: var(--accent-btn-hover);
   color: #fff;
 }
 .chip .n {

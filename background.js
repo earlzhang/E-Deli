@@ -1,4 +1,4 @@
-importScripts('store.js');
+importScripts('store.js', 'sync/provider-webdav.js', 'sync/engine.js');
 
 // ===== 右键菜单 =====
 function setupMenus() {
@@ -30,24 +30,29 @@ async function pageMetaOf(tabId) {
 }
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  let url = '', title = '';
+  let url = '', title = '', note = '';
   if (info.menuItemId === 'edeli-link' && info.linkUrl) {
     url = info.linkUrl;
-    try {
-      const r = await chrome.tabs.sendMessage(tab.id, { type: 'edeli:link-meta' });
-      if (r && r.url === url) title = r.text || '';
-    } catch (e) { /* 受限页面无 content script，忽略 */ }
+    if (tab && typeof tab.id === 'number') {
+      try {
+        const msgOpts = typeof info.frameId === 'number' ? { frameId: info.frameId } : undefined;
+        const r = await chrome.tabs.sendMessage(tab.id, { type: 'edeli:link-meta' }, msgOpts);
+        if (r && r.url === url) title = r.text || '';
+      } catch (e) { /* 受限页面无 content script，忽略 */ }
+    }
     title = title || url;
+    // 收藏链接入口仅使用右键附带的显式选区，不读取当前页其他无关划词
+    note = (info.selectionText || '').trim();
   } else if (info.menuItemId === 'edeli-page') {
     url = info.pageUrl || (tab && tab.url) || '';
     title = (tab && tab.title) || url;
+    if (!url) return;
+    // 页面选中文本自动作为备注；当前页是公众号文章时标题追加「｜ 公众号名」
+    const meta = tab && typeof tab.id === 'number' ? await pageMetaOf(tab.id) : { text: '', wxName: '' };
+    note = (info.selectionText || '').trim() || meta.text;
+    title = Store.wxTitle(title, url, meta.wxName);
   }
   if (!url) return;
-  // 页面选中文本自动作为备注；当前页是公众号文章时标题追加「｜ 公众号名」
-  // （链接入口不追加——目标是它页，拿不到目标页的公众号名）
-  const meta = tab ? await pageMetaOf(tab.id) : { text: '', wxName: '' };
-  const note = (info.selectionText || '').trim() || meta.text;
-  if (info.menuItemId === 'edeli-page') title = Store.wxTitle(title, url, meta.wxName);
   await chrome.storage.local.set({ pendingSave: { url, title, note, at: Date.now() } });
   openSavePopup();
 });
@@ -77,9 +82,88 @@ async function refreshBadge() {
   await chrome.action.setBadgeBackgroundColor({ color: '#0b57d0' });
   await chrome.action.setBadgeText({ text: n ? String(n) : '' });
 }
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes.links) refreshBadge();
+
+// ===== WebDAV 自动同步调度（防抖推送 + 定时拉取 + 启动同步） =====
+const ALARM_PULL = 'edeli-sync-pull';
+const ALARM_PUSH = 'edeli-sync-push';
+
+// 仅在配置变动或闹钟不存在/周期不一致时重建，避免 Service Worker 唤醒重置定时拉取倒计时
+async function schedulePullAlarm({ force = false } = {}) {
+  const cfg = await SyncEngine.getConfig();
+  const enabled = Boolean(cfg.enabled && cfg.mode === 'auto' && Number(cfg.pullIntervalMin) > 0);
+  if (!enabled) {
+    await chrome.alarms.clear(ALARM_PULL);
+    return;
+  }
+  const period = Math.max(1, Number(cfg.pullIntervalMin));
+  if (!force) {
+    const existing = await chrome.alarms.get(ALARM_PULL);
+    if (existing && existing.periodInMinutes === period) return;
+  }
+  await chrome.alarms.clear(ALARM_PULL);
+  chrome.alarms.create(ALARM_PULL, { periodInMinutes: period });
+}
+
+async function scheduleDebouncedPush() {
+  const cfg = await SyncEngine.getConfig();
+  if (!cfg.enabled || cfg.mode !== 'auto') return;
+  const sec = Number(cfg.pushDebounceSec);
+  if (!sec || sec <= 0) return;
+  await chrome.alarms.clear(ALARM_PUSH);
+  // Chromium 120+ 支持 30 秒（0.5 分钟）alarm
+  chrome.alarms.create(ALARM_PUSH, { delayInMinutes: Math.max(0.5, sec / 60) });
+}
+
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name === ALARM_PULL) {
+    refreshBadge();
+    await SyncEngine.syncNow({ direction: 'merge', reason: 'alarm-pull' });
+  } else if (alarm.name === ALARM_PUSH) {
+    const st = await SyncEngine.getState();
+    if (st.dirty) {
+      await SyncEngine.syncNow({ direction: 'merge', reason: 'alarm-push' });
+    }
+  }
 });
-chrome.runtime.onInstalled.addListener(refreshBadge);
-chrome.runtime.onStartup.addListener(refreshBadge);
-refreshBadge();
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // 纵深防御：仅接受来自扩展自身特权页面的同步控制指令，拒绝网页 content script 上下文
+  if (!sender || sender.id !== chrome.runtime.id || sender.tab) return;
+  if (!msg || typeof msg.type !== 'string') return;
+  if (msg.type === 'edeli:sync-now') {
+    SyncEngine.syncNow({
+      direction: msg.direction || 'merge',
+      reason: msg.reason || 'manual',
+    }).then(sendResponse).catch(err => sendResponse({ ok: false, error: err.message || String(err) }));
+    return true;
+  }
+  if (msg.type === 'edeli:sync-reschedule') {
+    schedulePullAlarm({ force: true })
+      .then(() => sendResponse({ ok: true }))
+      .catch(err => sendResponse({ ok: false, error: err.message || String(err) }));
+    return true;
+  }
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+  if (changes.links) refreshBadge();
+  if (changes.syncConfig) schedulePullAlarm({ force: true });
+  if (changes.syncDirty && changes.syncDirty.newValue === true) {
+    scheduleDebouncedPush();
+  }
+});
+
+chrome.runtime.onInstalled.addListener(() => {
+  refreshBadge();
+  schedulePullAlarm();
+});
+
+chrome.runtime.onStartup.addListener(async () => {
+  refreshBadge();
+  await schedulePullAlarm();
+  const cfg = await SyncEngine.getConfig();
+  if (cfg.enabled && cfg.mode === 'auto') {
+    SyncEngine.syncNow({ direction: 'merge', reason: 'startup' });
+  }
+});

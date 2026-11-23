@@ -21,7 +21,7 @@
    cd /Users/earlzhang/pycharm/addons/E-Deli
    git init -b main
    git add .
-   git commit -m "feat: initial public release of E-Deli v0.1.0"
+   git commit -m "feat: release E-Deli v0.2.0 with WebDAV sync"
    git remote add origin https://github.com/<你的用户名>/E-Deli.git
    git push -u origin main
    ```
@@ -47,10 +47,11 @@
 ```bash
 cd /Users/earlzhang/pycharm/addons/E-Deli
 mkdir -p dist
-zip -r dist/e-deli-0.1.0.zip \
+rm -f dist/e-deli-0.2.0.zip
+zip -r dist/e-deli-0.2.0.zip \
   manifest.json background.js content.js store.js digest.js \
-  theme.css popup.html popup.js manage.html manage.css manage.js \
-  icons/ _locales/ -x "*.DS_Store"
+  theme.css popup.html popup.js manage.html manage.css manage.js settings.js \
+  sync/ icons/ _locales/ -x "*.DS_Store"
 ```
 
 ---
@@ -58,7 +59,7 @@ zip -r dist/e-deli-0.1.0.zip \
 ## 第 4 步：注册并提交到 Microsoft Edge Add-ons
 
 1. 登录 [Microsoft Partner Center - Edge](https://partner.microsoft.com/dashboard/microsoftedge/overview)（免费注册个人开发者账号）。
-2. 点击 **Create new extension**，在 **Packages** 上传 `dist/e-deli-0.1.0.zip`。
+2. 点击 **Create new extension**，在 **Packages** 上传 `dist/e-deli-0.2.0.zip`。
 3. 在 **Properties / Store listings** 填写信息：
    - **Category（分类）**：`Productivity`（效率工具）
    - **Privacy Policy URL**：填第 1 步得到的 GitHub `PRIVACY.md` 链接
@@ -79,20 +80,22 @@ zip -r dist/e-deli-0.1.0.zip \
   > - 标签体系与快捷标签：支持空格/逗号快速打标签、历史标签自动补全与自定义快捷标签点选。
   > - 暖纸知识库管理页：提供智能视图（今日/本周/公众号/含书摘/未打标签）、多标签 OR/AND 组合筛选、标签重命名/合并/删除、Shift+Click 多选批量操作与 5 秒撤销删除。
   > - Markdown 汇总导出：支持按今日、昨日、本周、上周、自定义区间或当前筛选结果一键生成并复制/下载 Markdown 摘要。
-  > - 纯本地隐私安全：所有数据仅存于本地浏览器，支持 JSON 一键备份与恢复。
+  > - 纯本地隐私安全与可选 WebDAV 同步：默认纯本地存储，零统计追踪；亦可在设置中按需启用自托管 WebDAV（如坚果云/NAS）多端合并同步，并支持 JSON 一键备份与恢复。
 
 ### 审核备注参考（Notes for certification — 必填，加速过审）
 
 可直接复制以下英文说明填入 Edge 后台的审核备注框：
 
-> E-Deli is a purely offline/local-first bookmarking extension with zero network requests and zero analytics.
+> E-Deli is a local-first bookmarking extension with zero analytics and no developer-operated backend servers. All data stays local by default; users may optionally enable WebDAV sync to their own personal server (e.g. Jianguoyun or self-hosted NAS).
 >
 > Permission usage:
-> - `storage`: Stores bookmarks, tags, and user preferences locally in `chrome.storage.local`.
+> - `storage`: Stores bookmarks, tags, deletion tombstones, and user preferences locally in `chrome.storage.local`.
 > - `activeTab`: Reads the active tab's title and URL only when the user clicks the extension icon, presses the shortcut (Alt+D), or uses the context menu.
 > - `contextMenus`: Provides "Save page to E-Deli" and "Save link to E-Deli" right-click actions.
 > - `downloads`: Saves user-exported Markdown digests (.md) and JSON backups.
 > - `clipboardWrite`: Copies user-generated Markdown digests to the clipboard on button click.
+> - `alarms`: Schedules periodic pull and debounced push tasks only when the user opts in to WebDAV auto-sync.
+> - `optional_host_permissions` (`https://*/*`, `http://*/*`): Not requested on install; requested on demand via `chrome.permissions.request` solely for the single origin of the user's configured WebDAV server.
 > - `content_scripts` (`http://*/*`, `https://*/*`): Only responds to user-triggered save actions to retrieve currently selected text (as bookmark note), the text of the right-clicked `<a>` element, or the author name (`#js_name`) on WeChat Official Account pages. No background tracking or passive data collection occurs.
 
 ---

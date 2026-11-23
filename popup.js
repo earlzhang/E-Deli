@@ -1,5 +1,5 @@
 const $ = id => document.getElementById(id);
-let allTags = [], quickList = [], sugIdx = -1;
+let allTags = [], quickList = [], sugIdx = -1, saving = false;
 
 // 同步管理页的主题偏好
 const savedTheme = localStorage.getItem('edeli_theme');
@@ -21,9 +21,9 @@ async function updateToday() {
 }
 
 function fillEntry(e) {
-  $('title').value = e.title;
-  $('tags').value = e.tags.join(' ');
-  $('note').value = e.note;
+  $('title').value = e.title || '';
+  $('tags').value = (e.tags || []).join(' ');
+  $('note').value = e.note || '';
   $('existed').textContent = '已收藏 · 将更新';
   $('save').textContent = '更新';
 }
@@ -54,7 +54,7 @@ function renderQuick() {
 
 // ===== 标签自动补全：对最后一个 token 给建议，支持 ↑↓/Enter/Tab =====
 function lastToken() {
-  const m = $('tags').value.match(/[^ ,，]*$/);
+  const m = $('tags').value.match(/[^\s,，]*$/);
   return m ? m[0].toLowerCase() : '';
 }
 function hideSug() {
@@ -62,7 +62,7 @@ function hideSug() {
   sugIdx = -1;
 }
 function pickSug(tag) {
-  $('tags').value = $('tags').value.replace(/[^ ,，]*$/, tag + ' ');
+  $('tags').value = $('tags').value.replace(/[^\s,，]*$/, tag + ' ');
   hideSug();
   renderQuick();
   $('tags').focus();
@@ -160,9 +160,15 @@ async function init() {
 }
 
 $('save').addEventListener('click', async () => {
+  if (saving) return;
+  const rawUrl = $('url').value.trim();
+  if (!rawUrl) { setStatus('网址不能为空', true); return; }
+  if (Store.isForbiddenUrl(rawUrl)) { setStatus('不支持保存该协议的网址', true); return; }
+  saving = true;
+  $('save').disabled = true;
   try {
     const { existed } = await Store.upsert({
-      url: $('url').value,
+      url: rawUrl,
       title: $('title').value,
       tags: $('tags').value,
       note: $('note').value,
@@ -172,7 +178,10 @@ $('save').addEventListener('click', async () => {
     $('save').textContent = '更新';
     updateToday();
   } catch (e) {
-    setStatus('网址不能为空', true);
+    setStatus((e && e.message) || '保存失败', true);
+  } finally {
+    saving = false;
+    $('save').disabled = false;
   }
 });
 
@@ -183,7 +192,9 @@ $('manage').addEventListener('click', e => {
 
 document.addEventListener('keydown', e => {
   if (e.isComposing) return;
-  if (e.key === 'Enter' && e.target.id !== 'note') {
+  // 仅在单行输入框内按 Enter 提交，防止在按钮/链接上双次提交或误保存
+  if (e.key === 'Enter' && e.target && e.target.tagName === 'INPUT') {
+    e.preventDefault();
     $('save').click();
   }
   if (e.key === 'Escape') hideSug();

@@ -20,6 +20,7 @@ function wxAccount() {
 chrome.runtime.onMessage.addListener((msg, _sender, send) => {
   if (msg && msg.type === 'edeli:link-meta') send(lastLink);
   if (msg && msg.type === 'edeli:selection') {
-    send({ text: (getSelection().toString() || '').trim(), wxName: wxAccount() });
+    const sel = typeof window.getSelection === 'function' ? window.getSelection() : null;
+    send({ text: (sel ? sel.toString() : '').trim(), wxName: wxAccount() });
   }
 });

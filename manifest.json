@@ -1,15 +1,34 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extName__",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "default_locale": "zh_CN",
   "description": "__MSG_extDescription__",
-  "permissions": ["storage", "contextMenus", "downloads", "activeTab", "clipboardWrite"],
-  "background": { "service_worker": "background.js" },
+  "permissions": [
+    "storage",
+    "contextMenus",
+    "downloads",
+    "activeTab",
+    "clipboardWrite",
+    "alarms"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+  "options_page": "manage.html#settings",
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["content.js"],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
@@ -26,7 +45,9 @@
   },
   "commands": {
     "save-page": {
-      "suggested_key": { "default": "Alt+D" },
+      "suggested_key": {
+        "default": "Alt+D"
+      },
       "description": "__MSG_commandSaveDesc__"
     }
   }

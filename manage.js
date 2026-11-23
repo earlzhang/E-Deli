@@ -22,6 +22,7 @@ const state = {
   editingOldUrl: null,  // null 表示新建
   managingTag: null,
   batchTagAction: 'add', // add | remove
+  lastRenderedRev: -1,  // 已渲染的本地版本号，用于与 storage.onChanged 去重防双倍重绘
 };
 
 // ===== 工具函数 =====
@@ -58,6 +59,24 @@ function dayLabel(dayKey) {
   return `${dayKey} ${Digest.weekday(d)}`;
 }
 
+async function copyTextSafe(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (_) { ok = false; }
+    ta.remove();
+    return ok;
+  }
+}
+
 // ===== 主题初始化与切换（默认浅色，仅手动点击开启深色） =====
 function applyTheme(theme) {
   if (theme === 'dark') {
@@ -66,6 +85,9 @@ function applyTheme(theme) {
   } else {
     document.documentElement.setAttribute('data-theme', 'light');
     localStorage.setItem('edeli_theme', 'light');
+  }
+  if (window.EDeliSettings && typeof window.EDeliSettings.syncGeneralToggles === 'function') {
+    window.EDeliSettings.syncGeneralToggles();
   }
 }
 applyTheme(localStorage.getItem('edeli_theme') === 'dark' ? 'dark' : 'light');
@@ -137,24 +159,37 @@ function filtered() {
 }
 
 // ===== 侧栏渲染：视图计数、存储、快捷标签、标签索引 =====
+function updateViewActiveUI() {
+  document.querySelectorAll('#viewList .view-item').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.view === state.view);
+  });
+}
+
 async function renderStorageAndCounts() {
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const weekStart = Digest.weekStart(now).getTime();
 
-  $('cnt-all').textContent = state.entries.length;
-  $('cnt-today').textContent = state.entries.filter(e => e.savedAt >= todayStart).length;
-  $('cnt-week').textContent = state.entries.filter(e => e.savedAt >= weekStart).length;
-  $('cnt-wx').textContent = state.entries.filter(e => Store.isWx(e.url)).length;
-  $('cnt-noted').textContent = state.entries.filter(e => e.note && e.note.trim()).length;
-  $('cnt-untagged').textContent = state.entries.filter(e => !e.tags || e.tags.length === 0).length;
+  let cntToday = 0, cntWeek = 0, cntWx = 0, cntNoted = 0, cntUntagged = 0;
+  for (const e of state.entries) {
+    if (e.savedAt >= todayStart) cntToday++;
+    if (e.savedAt >= weekStart) cntWeek++;
+    if (Store.isWx(e.url)) cntWx++;
+    if (e.note && e.note.trim()) cntNoted++;
+    if (!e.tags || e.tags.length === 0) cntUntagged++;
+  }
 
-  document.querySelectorAll('#viewList .view-item').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.view === state.view);
-  });
+  $('cnt-all').textContent = state.entries.length;
+  $('cnt-today').textContent = cntToday;
+  $('cnt-week').textContent = cntWeek;
+  $('cnt-wx').textContent = cntWx;
+  $('cnt-noted').textContent = cntNoted;
+  $('cnt-untagged').textContent = cntUntagged;
+
+  updateViewActiveUI();
 
   const bytes = await chrome.storage.local.getBytesInUse();
-  const quota = chrome.storage.local.QUOTA_BYTES || 5242880;
+  const quota = chrome.storage.local.QUOTA_BYTES || 10485760;
   const pct = Math.min(100, Math.round((bytes / quota) * 100));
   $('storageText').textContent = `${fmtSize(bytes)} / ${fmtSize(quota)}`;
   $('storageFill').style.width = `${pct}%`;
@@ -163,8 +198,7 @@ async function renderStorageAndCounts() {
   $('storageFill').classList.toggle('warn', warn);
 }
 
-async function renderQuick() {
-  state.quickList = await Store.quickTags();
+function renderQuickChipsDOM() {
   const box = $('quickList');
   box.textContent = '';
   for (const t of state.quickList) {
@@ -176,12 +210,18 @@ async function renderQuick() {
     x.onclick = async ev => {
       ev.stopPropagation();
       await Store.removeQuickTag(t);
+      state.lastRenderedRev = await Store.getLocalRev();
       await renderQuick();
     };
     chip.append(x);
     chip.onclick = () => toggleTagFilter(k);
     box.append(chip);
   }
+}
+
+async function renderQuick() {
+  state.quickList = await Store.quickTags();
+  renderQuickChipsDOM();
 }
 
 function renderTags() {
@@ -301,6 +341,16 @@ function renderActiveBar() {
 }
 
 // ===== 主列表渲染（按天分组 + 两种密度） =====
+// 原地同步勾选样式，避免勾选复选框时全量重建 DOM 与折叠已展开书摘
+function syncSelectionUI() {
+  document.querySelectorAll('#list .bookmark-card').forEach(card => {
+    const isSel = state.selected.has(card.dataset.url);
+    card.classList.toggle('selected', isSel);
+    const cb = card.querySelector('.card-check input[type="checkbox"]');
+    if (cb) cb.checked = isSel;
+  });
+}
+
 function renderList() {
   const items = filtered();
   $('feedSummaryText').textContent = `显示 ${items.length} 条（共 ${state.entries.length} 条）`;
@@ -334,19 +384,22 @@ function renderList() {
     groups.get(key).push(e);
   }
 
+  const frag = document.createDocumentFragment();
   for (const [dayKey, dayItems] of groups) {
     const section = el('section', 'day-group');
     const head = el('div', 'day-header');
     head.append(el('span', null, dayLabel(dayKey)), el('span', 'day-count', `${dayItems.length} 条`));
     section.append(head);
     for (const e of dayItems) section.append(bookmarkCard(e, items));
-    box.append(section);
+    frag.append(section);
   }
+  box.append(frag);
 }
 
 function bookmarkCard(e, currentItems) {
   const isSel = state.selected.has(e.url);
   const card = el('article', 'bookmark-card' + (isSel ? ' selected' : ''));
+  card.dataset.url = e.url;
 
   // 复选框（支持 Shift+Click 连选）
   const checkWrap = el('div', 'card-check');
@@ -369,33 +422,41 @@ function bookmarkCard(e, currentItems) {
       cb.checked ? state.selected.add(e.url) : state.selected.delete(e.url);
     }
     state.lastAnchorUrl = e.url;
-    renderList();
+    syncSelectionUI();
     renderBatchBar();
+    if ($('exportDrawer').classList.contains('open') && state.exportMode === 'selected') {
+      generateExport();
+    }
   };
   checkWrap.append(cb);
 
   const body = el('div', 'card-body');
   const top = el('div', 'card-top');
   const { mainTitle, wxName } = Store.splitWxTitle(e.title, e.url);
-  const titleLink = el('a', 'card-title', mainTitle);
-  titleLink.href = e.url;
-  titleLink.target = '_blank';
-  titleLink.rel = 'noopener';
+  let titleNode;
+  if (Store.isSafeHref(e.url)) {
+    titleNode = el('a', 'card-title', mainTitle);
+    titleNode.href = e.url;
+    titleNode.target = '_blank';
+    titleNode.rel = 'noopener noreferrer';
+  } else {
+    titleNode = el('span', 'card-title card-title-disabled', mainTitle);
+    titleNode.title = `非 http/https 链接，已禁止直接打开：${e.url}`;
+  }
 
   const ops = el('div', 'card-ops');
   const editBtn = el('button', 'op-btn', '编辑');
   editBtn.onclick = () => openEditModal(e);
   const copyMdBtn = el('button', 'op-btn', '复制MD');
   copyMdBtn.onclick = async () => {
-    const tags = (e.tags || []).map(t => `\`${t}\``).join(' ');
-    const line = `- [${e.title}](${e.url})${tags ? ' ' + tags : ''}` + (e.note ? `\n  > ${e.note.replace(/\n/g, '\n  > ')}` : '');
-    await navigator.clipboard.writeText(line);
-    showToast('已复制 Markdown 条目');
+    const ok = await copyTextSafe(Digest.formatLine(e));
+    showToast(ok ? '已复制 Markdown 条目' : '复制失败，请检查剪贴板权限');
   };
   const delBtn = el('button', 'op-btn danger', '删除');
   delBtn.onclick = async () => {
     const removed = await Store.removeMany([e.url]);
     state.selected.delete(e.url);
+    if (state.lastAnchorUrl === e.url) state.lastAnchorUrl = null;
     await reload();
     showToast('已删除书签', async () => {
       await Store.restoreMany(removed);
@@ -404,7 +465,7 @@ function bookmarkCard(e, currentItems) {
     });
   };
   ops.append(editBtn, copyMdBtn, delBtn);
-  top.append(titleLink, ops);
+  top.append(titleNode, ops);
   body.append(top);
 
   // 元信息行：公众号徽标 / 域名 + 时间
@@ -461,14 +522,21 @@ $('selectAllBtn').addEventListener('click', () => {
   } else {
     for (const e of items) state.selected.add(e.url);
   }
-  renderList();
+  syncSelectionUI();
   renderBatchBar();
+  if ($('exportDrawer').classList.contains('open') && state.exportMode === 'selected') {
+    generateExport();
+  }
 });
 
 $('batchClearBtn').addEventListener('click', () => {
   state.selected.clear();
-  renderList();
+  state.lastAnchorUrl = null;
+  syncSelectionUI();
   renderBatchBar();
+  if ($('exportDrawer').classList.contains('open') && state.exportMode === 'selected') {
+    generateExport();
+  }
 });
 
 $('batchDeleteBtn').addEventListener('click', async () => {
@@ -476,6 +544,7 @@ $('batchDeleteBtn').addEventListener('click', async () => {
   if (!urls.length) return;
   const removed = await Store.removeMany(urls);
   state.selected.clear();
+  state.lastAnchorUrl = null;
   await reload();
   showToast(`已删除 ${removed.length} 条书签`, async () => {
     await Store.restoreMany(removed);
@@ -543,7 +612,7 @@ function renderModalQuickChips() {
 }
 
 function updateModalSug() {
-  const m = $('mTags').value.match(/[^ ,，]*$/);
+  const m = $('mTags').value.match(/[^\s,，]*$/);
   const tok = m ? m[0].toLowerCase() : '';
   const list = $('mSugList');
   const hits = tok ? state.allTagNames.filter(t => t.toLowerCase().includes(tok) && t.toLowerCase() !== tok).slice(0, 8) : [];
@@ -561,7 +630,7 @@ function updateModalSug() {
 }
 
 function pickModalSug(tag) {
-  $('mTags').value = $('mTags').value.replace(/[^ ,，]*$/, tag + ' ');
+  $('mTags').value = $('mTags').value.replace(/[^\s,，]*$/, tag + ' ');
   $('mSugList').classList.remove('open');
   mSugIndex = -1;
   renderModalQuickChips();
@@ -604,24 +673,48 @@ function openEditModal(entry) {
 $('newBookmarkBtn').addEventListener('click', () => openEditModal(null));
 
 async function saveEditModal() {
-  const url = $('mUrl').value.trim();
+  let url = $('mUrl').value.trim();
   if (!url) { showToast('网址不能为空'); $('mUrl').focus(); return; }
-  if (state.editingOldUrl) {
-    await Store.update(state.editingOldUrl, {
-      url,
-      title: $('mTitle').value,
-      tags: $('mTags').value,
-      note: $('mNote').value,
-    });
-    showToast('已更新书签');
-  } else {
-    await Store.upsert({
-      url,
-      title: $('mTitle').value,
-      tags: $('mTags').value,
-      note: $('mNote').value,
-    });
-    showToast('已添加书签');
+  // 自动补全无协议的普通网址，防止点击变成相对路径 404
+  if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url)) {
+    url = 'https://' + url;
+  }
+  if (Store.isForbiddenUrl(url)) {
+    showToast('不支持保存该协议的网址');
+    $('mUrl').focus();
+    return;
+  }
+  if (state.editingOldUrl && url !== state.editingOldUrl) {
+    const conflict = state.entries.some(e => e.url === url);
+    if (conflict && !confirm('目标网址已存在于书签库中，继续保存将覆盖原有条目，确定吗？')) {
+      return;
+    }
+  }
+  try {
+    if (state.editingOldUrl) {
+      await Store.update(state.editingOldUrl, {
+        url,
+        title: $('mTitle').value,
+        tags: $('mTags').value,
+        note: $('mNote').value,
+      });
+      if (state.selected.has(state.editingOldUrl) && url !== state.editingOldUrl) {
+        state.selected.delete(state.editingOldUrl);
+        state.selected.add(url);
+      }
+      showToast('已更新书签');
+    } else {
+      await Store.upsert({
+        url,
+        title: $('mTitle').value,
+        tags: $('mTags').value,
+        note: $('mNote').value,
+      });
+      showToast('已添加书签');
+    }
+  } catch (e) {
+    showToast((e && e.message) || '保存失败');
+    return;
   }
   closeAllModals();
   await reload();
@@ -649,6 +742,11 @@ $('tmNewName').addEventListener('input', () => {
   const old = state.managingTag || '';
   const hint = $('tmMergeHint');
   if (!next || next.toLowerCase() === old.toLowerCase()) { hint.hidden = true; return; }
+  if (/[\s,，]/.test(next)) {
+    hint.textContent = '单个标签名不能包含空格或逗号。';
+    hint.hidden = false;
+    return;
+  }
   const exists = state.allTagNames.find(t => t.toLowerCase() === next.toLowerCase());
   if (exists) {
     hint.textContent = `标签「${exists}」已存在，应用后将把 #${old} 合并至 #${exists}。`;
@@ -662,14 +760,23 @@ $('tmRenameBtn').addEventListener('click', async () => {
   const next = $('tmNewName').value.trim();
   const old = state.managingTag;
   if (!next || next === old) { closeAllModals(); return; }
-  const n = await Store.renameTag(old, next);
-  if (state.tags.has(old.toLowerCase())) {
-    state.tags.delete(old.toLowerCase());
-    state.tags.add(next.toLowerCase());
+  if (/[\s,，]/.test(next)) {
+    showToast('标签名不能包含空格或逗号');
+    $('tmNewName').focus();
+    return;
   }
-  closeAllModals();
-  await reload();
-  showToast(`已将 #${old} 更新为 #${next}（影响 ${n} 条）`);
+  try {
+    const n = await Store.renameTag(old, next);
+    if (state.tags.has(old.toLowerCase())) {
+      state.tags.delete(old.toLowerCase());
+      state.tags.add(next.toLowerCase());
+    }
+    closeAllModals();
+    await reload();
+    showToast(`已将 #${old} 更新为 #${next}（影响 ${n} 条）`);
+  } catch (e) {
+    showToast((e && e.message) || '重命名失败');
+  }
 });
 
 $('tmToggleQuickBtn').addEventListener('click', async () => {
@@ -677,6 +784,7 @@ $('tmToggleQuickBtn').addEventListener('click', async () => {
   const inQuick = state.quickList.some(t => t.toLowerCase() === tag.toLowerCase());
   if (inQuick) await Store.removeQuickTag(tag);
   else await Store.addQuickTag(tag);
+  state.lastRenderedRev = await Store.getLocalRev();
   await renderQuick();
   $('tmToggleQuickBtn').textContent = inQuick ? '加入快捷标签' : '移出快捷标签';
   showToast(inQuick ? '已移出快捷标签' : '已加入快捷标签');
@@ -706,13 +814,22 @@ document.querySelectorAll('[data-close-modal]').forEach(btn => btn.addEventListe
 // ===== 右侧滑出式导出抽屉 =====
 function openDrawer(mode) {
   if (mode) state.exportMode = mode;
+  $('settingsDrawer').classList.remove('open');
   $('drawerBackdrop').classList.add('open');
   $('exportDrawer').classList.add('open');
   generateExport();
 }
 function closeDrawer() {
+  if ($('settingsDrawer').classList.contains('open') &&
+      window.EDeliSettings && typeof window.EDeliSettings.resetPasswordMask === 'function') {
+    window.EDeliSettings.resetPasswordMask();
+  }
   $('drawerBackdrop').classList.remove('open');
   $('exportDrawer').classList.remove('open');
+  $('settingsDrawer').classList.remove('open');
+  if (location.hash === '#settings') {
+    history.replaceState(null, '', location.pathname + location.search);
+  }
 }
 $('openExportBtn').addEventListener('click', () => openDrawer());
 $('closeDrawerBtn').addEventListener('click', closeDrawer);
@@ -775,14 +892,8 @@ $('quickCopyMdBtn').addEventListener('click', async () => {
     return;
   }
   state.lastExport = res;
-  try {
-    await navigator.clipboard.writeText(res.markdown);
-  } catch (e) {
-    $('preview').value = res.markdown;
-    $('preview').select();
-    document.execCommand('copy');
-  }
-  showToast(`已复制 ${res.filename}（${res.count} 条）`);
+  const ok = await copyTextSafe(res.markdown);
+  showToast(ok ? `已复制 ${res.filename}（${res.count} 条）` : '复制失败，请检查剪贴板权限');
 });
 
 document.querySelectorAll('#exportRangePills [data-r]').forEach(b => {
@@ -810,36 +921,40 @@ $('dl').addEventListener('click', async () => {
 
 $('copy').addEventListener('click', async () => {
   if (!state.lastExport) return;
-  try {
-    await navigator.clipboard.writeText(state.lastExport.markdown);
-  } catch (e) {
-    $('preview').select();
-    document.execCommand('copy');
-  }
-  showToast('Markdown 已复制到剪贴板');
+  const ok = await copyTextSafe(state.lastExport.markdown);
+  showToast(ok ? 'Markdown 已复制到剪贴板' : '复制失败，请检查剪贴板权限');
 });
 
 // ===== 顶部日期 Popover 与其他控制 =====
 function applyDatePreset(preset) {
   state.datePreset = preset;
   const now = new Date();
-  const today0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
   if (preset === 'all') {
     state.fs = 0; state.fe = Infinity;
     $('fs').value = ''; $('fe').value = '';
     $('dateFilterLabel').textContent = '全部时间';
   } else if (preset === 'today') {
-    state.fs = today0; state.fe = today0 + 86400000 - 1;
+    state.fs = new Date(y, m, d).getTime();
+    state.fe = new Date(y, m, d + 1).getTime() - 1;
     $('dateFilterLabel').textContent = '今天';
   } else if (preset === '7d') {
-    state.fs = today0 - 6 * 86400000; state.fe = Infinity;
+    state.fs = new Date(y, m, d - 6).getTime();
+    state.fe = Infinity;
     $('dateFilterLabel').textContent = '近 7 天';
   } else if (preset === '30d') {
-    state.fs = today0 - 29 * 86400000; state.fe = Infinity;
+    state.fs = new Date(y, m, d - 29).getTime();
+    state.fe = Infinity;
     $('dateFilterLabel').textContent = '近 30 天';
   } else {
     state.fs = $('fs').value ? new Date($('fs').value + 'T00:00:00').getTime() : 0;
     state.fe = $('fe').value ? new Date($('fe').value + 'T23:59:59.999').getTime() : Infinity;
+    if (state.fs && Number.isFinite(state.fe) && state.fs > state.fe) {
+      const tmp = state.fs;
+      state.fs = new Date($('fe').value + 'T00:00:00').getTime();
+      state.fe = new Date($('fs').value + 'T23:59:59.999').getTime();
+      void tmp;
+    }
     $('dateFilterLabel').textContent = `${$('fs').value || '...'} ~ ${$('fe').value || '...'}`;
   }
 }
@@ -849,8 +964,13 @@ $('dateFilterBtn').addEventListener('click', e => {
   $('datePopover').classList.toggle('open');
 });
 document.addEventListener('click', e => {
-  if (!$('datePopover').contains(e.target) && e.target !== $('dateFilterBtn')) {
+  if (!$('datePopover').contains(e.target) && !$('dateFilterBtn').contains(e.target)) {
     $('datePopover').classList.remove('open');
+  }
+  // 窄屏下点击侧栏外区域自动收起侧栏
+  const sidebar = $('sidebar');
+  if (sidebar.classList.contains('open') && !sidebar.contains(e.target) && !$('mobileMenuBtn').contains(e.target)) {
+    sidebar.classList.remove('open');
   }
 });
 document.querySelectorAll('#datePopover [data-dp]').forEach(btn => {
@@ -872,11 +992,28 @@ document.querySelectorAll('#viewList .view-item').forEach(btn => {
   });
 });
 
-$('mobileMenuBtn').addEventListener('click', () => $('sidebar').classList.toggle('open'));
+$('mobileMenuBtn').addEventListener('click', e => {
+  e.stopPropagation();
+  $('sidebar').classList.toggle('open');
+});
 
-$('q').addEventListener('input', () => {
+// 搜索防抖（兼容中文输入法组合态）
+let qTimer = null;
+let qComposing = false;
+function commitSearch() {
   state.q = $('q').value.trim();
   onFilterChanged();
+}
+$('q').addEventListener('compositionstart', () => { qComposing = true; });
+$('q').addEventListener('compositionend', () => {
+  qComposing = false;
+  clearTimeout(qTimer);
+  commitSearch();
+});
+$('q').addEventListener('input', () => {
+  if (qComposing) return;
+  clearTimeout(qTimer);
+  qTimer = setTimeout(commitSearch, 120);
 });
 
 $('sortSelect').addEventListener('change', () => {
@@ -888,6 +1025,9 @@ $('densityBtn').addEventListener('click', () => {
   state.density = state.density === 'comfortable' ? 'compact' : 'comfortable';
   localStorage.setItem('edeli_density', state.density);
   renderList();
+  if (window.EDeliSettings && typeof window.EDeliSettings.syncGeneralToggles === 'function') {
+    window.EDeliSettings.syncGeneralToggles();
+  }
   showToast(state.density === 'compact' ? '已切换至紧凑模式' : '已切换至书摘卡片模式');
 });
 
@@ -915,6 +1055,7 @@ async function addQuick() {
   const v = $('quickAdd').value.trim();
   if (!v) return;
   await Store.addQuickTag(v);
+  state.lastRenderedRev = await Store.getLocalRev();
   $('quickAdd').value = '';
   await renderQuick();
 }
@@ -945,28 +1086,19 @@ $('importFile').addEventListener('change', async ev => {
   try { data = JSON.parse(await f.text()); }
   catch (e) { showToast('备份文件解析失败：不是合法 JSON'); return; }
   const items = Array.isArray(data) ? data
-    : data.links ? Object.values(data.links)
-    : typeof data === 'object' ? Object.values(data) : [];
-  const valid = items.filter(e => e && e.url);
+    : data && data.links && typeof data.links === 'object' ? Object.values(data.links)
+    : data && typeof data === 'object' ? Object.values(data) : [];
+  const valid = items.filter(e => e && typeof e === 'object' && e.url);
   if (!valid.length) { showToast('备份文件中没有可识别的收藏条目'); return; }
 
-  const links = await Store.loadAll();
-  let added = 0, overwrote = 0;
-  for (const e of valid) {
-    const prev = links[e.url];
-    prev ? overwrote++ : added++;
-    links[e.url] = {
-      url: e.url,
-      title: String(e.title || e.url),
-      note: String(e.note || ''),
-      tags: Store.normalizeTags(e.tags || []),
-      savedAt: Math.min(prev ? prev.savedAt : Infinity, e.savedAt || Date.now()),
-      updatedAt: Date.now(),
-    };
+  const { added, overwrote, skipped } = await Store.importEntries(valid);
+  if (added + overwrote === 0) {
+    showToast('备份文件中没有可导入的合法书签');
+    return;
   }
-  await Store.saveAll(links);
   await reload();
-  showToast(`导入完成：新增 ${added} 条，更新 ${overwrote} 条`);
+  const skipMsg = skipped ? `，跳过无效 ${skipped} 条` : '';
+  showToast(`导入完成：新增 ${added} 条，更新 ${overwrote} 条${skipMsg}`);
 });
 
 // ===== 全局键盘流 =====
@@ -984,31 +1116,71 @@ document.addEventListener('keydown', e => {
 
   if (e.key === 'Escape') {
     if ($('modalBackdrop').classList.contains('open')) { closeAllModals(); return; }
+    if ($('settingsDrawer').classList.contains('open')) { closeDrawer(); return; }
     if ($('exportDrawer').classList.contains('open')) { closeDrawer(); return; }
     if ($('datePopover').classList.contains('open')) { $('datePopover').classList.remove('open'); return; }
-    if (state.selected.size) { state.selected.clear(); renderList(); renderBatchBar(); }
+    if ($('sidebar').classList.contains('open')) { $('sidebar').classList.remove('open'); return; }
+    if (state.selected.size) {
+      state.selected.clear();
+      state.lastAnchorUrl = null;
+      syncSelectionUI();
+      renderBatchBar();
+    }
   }
 });
 
 // ===== 刷新联动 =====
 function onFilterChanged() {
-  renderStorageAndCounts();
-  renderQuick();
+  updateViewActiveUI();
+  renderQuickChipsDOM();
   renderTags();
   renderActiveBar();
   renderList();
   if ($('exportDrawer').classList.contains('open')) generateExport();
 }
 
+let reloadPromise = null;
+let reloadQueued = false;
+
 async function reload() {
-  state.entries = await Store.list();
-  await renderStorageAndCounts();
-  await renderQuick();
-  renderTags();
-  renderActiveBar();
-  renderList();
-  renderBatchBar();
-  if ($('exportDrawer').classList.contains('open')) generateExport();
+  if (reloadPromise) {
+    reloadQueued = true;
+    return reloadPromise;
+  }
+  reloadPromise = (async () => {
+    do {
+      reloadQueued = false;
+      const [entries, rev] = await Promise.all([Store.list(), Store.getLocalRev()]);
+      state.entries = entries;
+      state.lastRenderedRev = rev;
+      // 清理已不存在的选中项
+      const urlSet = new Set(entries.map(e => e.url));
+      for (const u of [...state.selected]) {
+        if (!urlSet.has(u)) state.selected.delete(u);
+      }
+      await renderStorageAndCounts();
+      await renderQuick();
+      renderTags();
+      renderActiveBar();
+      renderList();
+      renderBatchBar();
+      if ($('exportDrawer').classList.contains('open')) generateExport();
+    } while (reloadQueued);
+  })().finally(() => {
+    reloadPromise = null;
+  });
+  return reloadPromise;
 }
+
+window.EDeliManage = {
+  $,
+  pad,
+  state,
+  applyTheme,
+  renderList,
+  reload,
+  showToast,
+  closeDrawer,
+};
 
 reload();
