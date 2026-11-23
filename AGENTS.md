@@ -57,6 +57,14 @@ chrome.storage.local['links'] = {
   node --test tests/run.test.mjs
   ```
 
+## 版本与变更日志（SemVer）
+
+- 版本号以 [manifest.json](manifest.json) 与 [CHANGELOG.md](CHANGELOG.md) 为准：
+  - 新增功能升 **MINOR**（如 `0.1.0` → `0.2.0`）
+  - Bug 修复 / 安全加固 / 性能优化升 **PATCH**（如 `0.2.0` → `0.2.1`）
+  - 破坏性或不兼容变更升 **MAJOR**
+- 每次发版或确认功能/修复归档时，同步更新 `manifest.json`、`CHANGELOG.md` 与 `EDGE_PUBLISH_GUIDE.md` 中的打包文件名。
+
 ## 已知取舍
 
 - `chrome.action.openPopup()` 需 Chromium 127+ 且须用户手势上下文；失败自动落 `windows.create` 小窗
