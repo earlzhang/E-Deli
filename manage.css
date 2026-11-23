@@ -395,6 +395,9 @@
   gap: 6px;
   margin-bottom: 10px;
 }
+.preset-grid .preset-full {
+  grid-column: 1 / -1;
+}
 .custom-dates {
   display: flex;
   flex-direction: column;

@@ -1,6 +1,6 @@
 // digest.js — Markdown 汇总渲染（纯函数，无 chrome API 依赖）
 // render(entries, opts) -> { markdown, filename, count }，内部按时间口径自行过滤
-//   opts: { kind:'daily', day } | { kind:'weekly', day } | { kind:'range', start, end } | { kind:'selection', title }
+//   opts: { kind:'daily', day, flat? } | { kind:'weekly', day, flat? } | { kind:'range', start, end, flat? } | { kind:'selection', title?, flat? }
 const Digest = (() => {
   const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
@@ -91,9 +91,15 @@ const Digest = (() => {
     return groups;
   }
 
+  function renderFlat(entries) {
+    const items = [...entries].sort((a, b) => b.savedAt - a.savedAt);
+    if (!items.length) return '（本期无收藏）\n';
+    return items.map(formatLine).join('\n') + '\n';
+  }
+
   function renderRange(entries, title) {
     const groups = groupByDay(entries);
-    const out = [`# ${title}`, ''];
+    const out = title ? [`# ${title}`, ''] : [];
     const days = [...groups.keys()].sort().reverse();
     if (!days.length) out.push('（本期无收藏）');
     for (const key of days) {
@@ -109,9 +115,13 @@ const Digest = (() => {
 
   function render(entries, opts) {
     const all = entries || [];
+    const flat = Boolean(opts.flat);
     if (opts.kind === 'daily') {
       const d = toDate(opts.day);
       const items = inSpan(all, dayStart(d), dayEnd(d));
+      if (flat) {
+        return { markdown: renderFlat(items), filename: `e-deli-${dateStr(d)}.md`, count: items.length };
+      }
       const out = [`# E-Deli 收藏 · ${dateStr(d)} ${weekday(d)}`, ''];
       if (!items.length) out.push('（本期无收藏）');
       for (const e of [...items].sort((a, b) => a.savedAt - b.savedAt)) out.push(formatLine(e));
@@ -126,18 +136,19 @@ const Digest = (() => {
       const items = inSpan(all, s, e);
       const { year, week } = isoWeekInfo(start);
       return {
-        markdown: renderRange(items,
-          `E-Deli 收藏 · ${year} 年第 ${week} 周（${shortDate(start)} ~ ${shortDate(end)}）`),
+        markdown: flat
+          ? renderFlat(items)
+          : renderRange(items, `E-Deli 收藏 · ${year} 年第 ${week} 周（${shortDate(start)} ~ ${shortDate(end)}）`),
         filename: `e-deli-${year}-W${pad(week)}.md`,
         count: items.length,
       };
     }
     if (opts.kind === 'selection') {
-      const label = opts.title || 'E-Deli 精选收藏';
+      const label = opts.title || '';
       const items = [...all];
       const suffix = dateStr(new Date());
       return {
-        markdown: renderRange(items, label),
+        markdown: flat ? renderFlat(items) : renderRange(items, label),
         filename: `e-deli-selection-${suffix}.md`,
         count: items.length,
       };
@@ -149,7 +160,7 @@ const Digest = (() => {
     const s = dayStart(startD), e = dayEnd(endD);
     const items = inSpan(all, s, e);
     return {
-      markdown: renderRange(items, `E-Deli 收藏 · ${dateStr(startD)} ~ ${dateStr(endD)}`),
+      markdown: flat ? renderFlat(items) : renderRange(items, `E-Deli 收藏 · ${dateStr(startD)} ~ ${dateStr(endD)}`),
       filename: `e-deli-${dateStr(startD)}_${dateStr(endD)}.md`,
       count: items.length,
     };

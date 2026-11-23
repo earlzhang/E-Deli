@@ -201,6 +201,52 @@ test('Digest: range 倒序自动交换 & formatLine 正确转义标题/URL括号
   assert.equal(rangeRes.filename, 'e-deli-2026-06-10_2026-06-20.md');
 });
 
+test('Digest: flat 模式不显示日期标题直接输出列表 & selection 无标题时不输出 H1', () => {
+  const { Digest } = createSandbox();
+  const e1 = {
+    url: 'https://a.com',
+    title: 'Article A',
+    tags: ['t1'],
+    note: '',
+    savedAt: new Date('2026-06-10T10:00:00').getTime(),
+  };
+  const e2 = {
+    url: 'https://b.com',
+    title: 'Article B',
+    tags: [],
+    note: 'memo',
+    savedAt: new Date('2026-06-12T15:00:00').getTime(),
+  };
+
+  // selection 无 title，默认按天分组但不含 H1
+  const selDated = Digest.render([e1, e2], { kind: 'selection', title: '' });
+  assert.equal(selDated.markdown.startsWith('## '), true);
+  assert.equal(selDated.markdown.includes('# E-Deli'), false);
+
+  // selection + flat：直接平铺列表，按 savedAt 降序，无任何标题和日期
+  const selFlat = Digest.render([e1, e2], { kind: 'selection', title: '', flat: true });
+  assert.equal(
+    selFlat.markdown,
+    '- [Article B](https://b.com)\n  > memo\n- [Article A](https://a.com) `t1`\n'
+  );
+
+  // daily / weekly / range + flat 均无标题和日期
+  const dailyFlat = Digest.render([e1], { kind: 'daily', day: '2026-06-10', flat: true });
+  assert.equal(dailyFlat.markdown, '- [Article A](https://a.com) `t1`\n');
+
+  const weeklyFlat = Digest.render([e1, e2], { kind: 'weekly', day: '2026-06-10', flat: true });
+  assert.equal(weeklyFlat.count, 2);
+  assert.equal(weeklyFlat.markdown.includes('#'), false);
+
+  const rangeFlat = Digest.render([e1, e2], { kind: 'range', start: '2026-06-10', end: '2026-06-12', flat: true });
+  assert.equal(rangeFlat.count, 2);
+  assert.equal(rangeFlat.markdown.includes('#'), false);
+
+  // 空数据
+  const emptyFlat = Digest.render([], { kind: 'selection', flat: true });
+  assert.equal(emptyFlat.markdown, '（本期无收藏）\n');
+});
+
 // ===== WebDAVProvider 测试 =====
 test('WebDAVProvider: 目录穿越防护、HTTP 安全性判断、404 建目录去 If-Match、PROPFIND 带 body', async () => {
   const calls = [];

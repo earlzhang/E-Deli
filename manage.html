@@ -174,7 +174,8 @@
             </button>
             <div class="popover-panel" id="datePopover">
               <div class="preset-grid">
-                <button class="btn btn-sm" data-dp="all">全部时间</button>
+                <button class="btn btn-sm preset-full" data-dp="all">全部时间</button>
+                <button class="btn btn-sm" data-dp="24h">过去 24 小时</button>
                 <button class="btn btn-sm" data-dp="today">今天</button>
                 <button class="btn btn-sm" data-dp="7d">近 7 天</button>
                 <button class="btn btn-sm" data-dp="30d">近 30 天</button>
@@ -267,6 +268,7 @@
       <div class="drawer-options">
         <label><input type="checkbox" id="useFilter" checked>叠加当前列表筛选</label>
         <label><input type="checkbox" id="onlyWx">仅公众号链接</label>
+        <label><input type="checkbox" id="noDate">不显示日期</label>
       </div>
       <textarea class="textarea drawer-preview" id="preview" readonly></textarea>
     </div>

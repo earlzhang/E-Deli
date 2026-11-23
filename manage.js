@@ -8,7 +8,7 @@ const state = {
   tagSort: 'count',     // count | alpha
   tagSearch: '',
   q: '',
-  datePreset: 'all',    // all | today | 7d | 30d | custom
+  datePreset: 'all',    // all | 24h | today | 7d | 30d | custom
   fs: 0,
   fe: Infinity,
   sort: 'newest',       // newest | oldest | updated
@@ -301,7 +301,7 @@ function renderActiveBar() {
     pills.push({ label: viewLabels[state.view], clear: () => { state.view = 'all'; } });
   }
   if (state.datePreset !== 'all') {
-    const labelMap = { today: '今天', '7d': '近 7 天', '30d': '近 30 天', custom: `${$('fs').value || '...'} ~ ${$('fe').value || '...'}` };
+    const labelMap = { '24h': '过去 24 小时', today: '今天', '7d': '近 7 天', '30d': '近 30 天', custom: `${$('fs').value || '...'} ~ ${$('fe').value || '...'}` };
     pills.push({
       label: `时间：${labelMap[state.datePreset]}`,
       clear: () => applyDatePreset('all'),
@@ -859,9 +859,10 @@ function computeExport() {
     if (!rs || !re) return null;
     opts = { kind: 'range', start: rs, end: re };
   } else {
-    opts = { kind: 'selection', title: mode === 'selected' ? 'E-Deli 精选书签汇总' : 'E-Deli 筛选书签汇总' };
+    opts = { kind: 'selection', title: mode === 'selected' ? '' : 'E-Deli 筛选书签汇总' };
   }
 
+  opts.flat = $('noDate').checked;
   return Digest.render(base, opts);
 }
 
@@ -904,6 +905,7 @@ document.querySelectorAll('#exportRangePills [data-r]').forEach(b => {
 });
 $('useFilter').addEventListener('change', generateExport);
 $('onlyWx').addEventListener('change', generateExport);
+$('noDate').addEventListener('change', generateExport);
 $('rs').addEventListener('change', generateExport);
 $('re').addEventListener('change', generateExport);
 
@@ -934,6 +936,10 @@ function applyDatePreset(preset) {
     state.fs = 0; state.fe = Infinity;
     $('fs').value = ''; $('fe').value = '';
     $('dateFilterLabel').textContent = '全部时间';
+  } else if (preset === '24h') {
+    state.fs = now.getTime() - 24 * 60 * 60 * 1000;
+    state.fe = Infinity;
+    $('dateFilterLabel').textContent = '过去 24 小时';
   } else if (preset === 'today') {
     state.fs = new Date(y, m, d).getTime();
     state.fe = new Date(y, m, d + 1).getTime() - 1;

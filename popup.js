@@ -143,7 +143,15 @@ async function init() {
   const existing = links[url];
   if (existing) {
     fillEntry(existing);
-    if (note && !existing.note) $('note').value = note;
+    if (note) {
+      const prev = (existing.note || '').trimEnd();
+      if (!prev) {
+        $('note').value = note;
+      } else if (!prev.includes(note)) {
+        $('note').value = `${prev}\n\n${note}`;
+        $('existed').textContent = '已收藏 · 已追加选中文字';
+      }
+    }
   } else if (note) {
     $('note').value = note;
   }
