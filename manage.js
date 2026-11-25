@@ -13,11 +13,12 @@ const state = {
   fe: Infinity,
   sort: 'newest',       // newest | oldest | updated
   density: localStorage.getItem('edeli_density') || 'comfortable',
+  exportPrefix: localStorage.getItem('edeli_export_prefix') || '',
   selected: new Set(),  // 选中的 url
   lastAnchorUrl: null,  // Shift+Click 连选锚点
   quickList: [],
   allTagNames: [],
-  exportMode: 'week',   // today | yesterday | week | lastweek | custom | current | selected
+  exportMode: 'week',   // 24h | today | yesterday | week | lastweek | custom | current | selected
   lastExport: null,
   editingOldUrl: null,  // null 表示新建
   managingTag: null,
@@ -846,7 +847,8 @@ function computeExport() {
 
   const now = new Date();
   let opts;
-  if (mode === 'today') opts = { kind: 'daily', day: now };
+  if (mode === '24h') opts = { kind: '24h', now };
+  else if (mode === 'today') opts = { kind: 'daily', day: now };
   else if (mode === 'yesterday') {
     const y = new Date(now); y.setDate(y.getDate() - 1);
     opts = { kind: 'daily', day: y };
@@ -863,6 +865,7 @@ function computeExport() {
   }
 
   opts.flat = $('noDate').checked;
+  opts.titlePrefix = (state.exportPrefix || '').trim() || Digest.DEFAULT_TITLE_PREFIX;
   return Digest.render(base, opts);
 }
 

@@ -1,7 +1,8 @@
 // digest.js — Markdown 汇总渲染（纯函数，无 chrome API 依赖）
 // render(entries, opts) -> { markdown, filename, count }，内部按时间口径自行过滤
-//   opts: { kind:'daily', day, flat? } | { kind:'weekly', day, flat? } | { kind:'range', start, end, flat? } | { kind:'selection', title?, flat? }
+//   opts: { kind:'24h', now?, titlePrefix?, flat? } | { kind:'daily', day, titlePrefix?, flat? } | { kind:'weekly', day, titlePrefix?, flat? } | { kind:'range', start, end, titlePrefix?, flat? } | { kind:'selection', title?, flat? }
 const Digest = (() => {
+  const DEFAULT_TITLE_PREFIX = 'E-Deli 收藏';
   const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
   const pad = n => String(n).padStart(2, '0');
@@ -116,13 +117,28 @@ const Digest = (() => {
   function render(entries, opts) {
     const all = entries || [];
     const flat = Boolean(opts.flat);
+    const rawPrefix = opts.titlePrefix === undefined
+      ? DEFAULT_TITLE_PREFIX
+      : String(opts.titlePrefix ?? '').replace(/[\r\n]+/g, ' ').trim();
+    const prefixHead = rawPrefix ? `${rawPrefix} · ` : '';
+    if (opts.kind === '24h') {
+      const now = opts.now ? toDate(opts.now) : new Date();
+      const endMs = now.getTime();
+      const startMs = endMs - 24 * 60 * 60 * 1000;
+      const items = inSpan(all, startMs, endMs);
+      return {
+        markdown: flat ? renderFlat(items) : renderRange(items, `${prefixHead}过去 24 小时`),
+        filename: `e-deli-24h-${dateStr(now)}.md`,
+        count: items.length,
+      };
+    }
     if (opts.kind === 'daily') {
       const d = toDate(opts.day);
       const items = inSpan(all, dayStart(d), dayEnd(d));
       if (flat) {
         return { markdown: renderFlat(items), filename: `e-deli-${dateStr(d)}.md`, count: items.length };
       }
-      const out = [`# E-Deli 收藏 · ${dateStr(d)} ${weekday(d)}`, ''];
+      const out = [`# ${prefixHead}${dateStr(d)} ${weekday(d)}`, ''];
       if (!items.length) out.push('（本期无收藏）');
       for (const e of [...items].sort((a, b) => a.savedAt - b.savedAt)) out.push(formatLine(e));
       out.push('');
@@ -138,7 +154,7 @@ const Digest = (() => {
       return {
         markdown: flat
           ? renderFlat(items)
-          : renderRange(items, `E-Deli 收藏 · ${year} 年第 ${week} 周（${shortDate(start)} ~ ${shortDate(end)}）`),
+          : renderRange(items, `${prefixHead}${year} 年第 ${week} 周（${shortDate(start)} ~ ${shortDate(end)}）`),
         filename: `e-deli-${year}-W${pad(week)}.md`,
         count: items.length,
       };
@@ -160,11 +176,11 @@ const Digest = (() => {
     const s = dayStart(startD), e = dayEnd(endD);
     const items = inSpan(all, s, e);
     return {
-      markdown: flat ? renderFlat(items) : renderRange(items, `E-Deli 收藏 · ${dateStr(startD)} ~ ${dateStr(endD)}`),
+      markdown: flat ? renderFlat(items) : renderRange(items, `${prefixHead}${dateStr(startD)} ~ ${dateStr(endD)}`),
       filename: `e-deli-${dateStr(startD)}_${dateStr(endD)}.md`,
       count: items.length,
     };
   }
 
-  return { render, formatLine, isoWeek, isoWeekInfo, weekStart, dateStr, weekday };
+  return { render, formatLine, isoWeek, isoWeekInfo, weekStart, dateStr, weekday, DEFAULT_TITLE_PREFIX };
 })();

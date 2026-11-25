@@ -247,6 +247,50 @@ test('Digest: flat 模式不显示日期标题直接输出列表 & selection 无
   assert.equal(emptyFlat.markdown, '（本期无收藏）\n');
 });
 
+test('Digest: 支持自定义 titlePrefix，未传时默认 E-Deli 收藏，空串省略前缀', () => {
+  const { Digest } = createSandbox();
+  const entries = [
+    { url: 'https://a.com', title: 'Article A', tags: ['t1'], note: '', savedAt: new Date('2026-06-10T10:00:00').getTime() },
+  ];
+
+  const dDefault = Digest.render(entries, { kind: 'daily', day: '2026-06-10' });
+  assert.ok(dDefault.markdown.startsWith('# E-Deli 收藏 · 2026-06-10 周三\n'));
+
+  const dCustom = Digest.render(entries, { kind: 'daily', day: '2026-06-10', titlePrefix: '我的阅读' });
+  assert.ok(dCustom.markdown.startsWith('# 我的阅读 · 2026-06-10 周三\n'));
+
+  const wCustom = Digest.render(entries, { kind: 'weekly', day: '2026-06-10', titlePrefix: '周报摘录' });
+  assert.ok(wCustom.markdown.startsWith('# 周报摘录 · 2026 年第 24 周（06-08 ~ 06-14）\n'));
+
+  const rCustom = Digest.render(entries, { kind: 'range', start: '2026-06-01', end: '2026-06-10', titlePrefix: '  书摘精选\n ' });
+  assert.ok(rCustom.markdown.startsWith('# 书摘精选 · 2026-06-01 ~ 2026-06-10\n'));
+
+  const dEmpty = Digest.render(entries, { kind: 'daily', day: '2026-06-10', titlePrefix: '' });
+  assert.ok(dEmpty.markdown.startsWith('# 2026-06-10 周三\n'));
+});
+
+test('Digest: 24h 模式按最近 24 小时过滤并支持 titlePrefix 与 flat', () => {
+  const { Digest } = createSandbox();
+  const now = new Date('2026-06-10T12:00:00');
+  const entries = [
+    { url: 'https://old.com', title: 'Too Old', tags: [], note: '', savedAt: new Date('2026-06-09T11:59:59').getTime() },
+    { url: 'https://yest.com', title: 'Yesterday', tags: ['a'], note: '', savedAt: new Date('2026-06-09T20:00:00').getTime() },
+    { url: 'https://today.com', title: 'Today', tags: ['b'], note: '', savedAt: new Date('2026-06-10T09:00:00').getTime() },
+  ];
+
+  const res = Digest.render(entries, { kind: '24h', now, titlePrefix: '我的收藏' });
+  assert.equal(res.count, 2);
+  assert.equal(res.filename, 'e-deli-24h-2026-06-10.md');
+  assert.ok(res.markdown.startsWith('# 我的收藏 · 过去 24 小时\n'));
+  assert.ok(res.markdown.includes('## 06-10 周三'));
+  assert.ok(res.markdown.includes('## 06-09 周二'));
+  assert.equal(res.markdown.includes('Too Old'), false);
+
+  const flatRes = Digest.render(entries, { kind: '24h', now, flat: true });
+  assert.equal(flatRes.count, 2);
+  assert.equal(flatRes.markdown.includes('#'), false);
+});
+
 // ===== WebDAVProvider 测试 =====
 test('WebDAVProvider: 目录穿越防护、HTTP 安全性判断、404 建目录去 If-Match、PROPFIND 带 body', async () => {
   const calls = [];

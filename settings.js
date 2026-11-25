@@ -56,6 +56,10 @@
     document.querySelectorAll('#sDensityToggle button').forEach(b => {
       b.classList.toggle('on', b.dataset.val === state.density);
     });
+    const prefixInput = $('sExportPrefix');
+    if (prefixInput) {
+      prefixInput.value = state.exportPrefix || '';
+    }
   }
 
   function resetPasswordMask() {
@@ -434,6 +438,24 @@
       renderList();
       syncGeneralToggles();
     });
+  });
+
+  $('sExportPrefix').addEventListener('input', e => {
+    const val = e.target.value.replace(/[\r\n]+/g, ' ').trim();
+    state.exportPrefix = val;
+    if (val) localStorage.setItem('edeli_export_prefix', val);
+    else localStorage.removeItem('edeli_export_prefix');
+  });
+
+  $('sExportPrefix').addEventListener('change', e => {
+    e.target.value = state.exportPrefix || '';
+  });
+
+  $('sExportPrefixReset').addEventListener('click', () => {
+    state.exportPrefix = '';
+    localStorage.removeItem('edeli_export_prefix');
+    $('sExportPrefix').value = '';
+    showToast('已恢复默认导出前缀');
   });
 
   $('sExportJsonBtn').addEventListener('click', () => $('exportJson').click());

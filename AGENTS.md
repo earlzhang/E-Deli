@@ -50,6 +50,10 @@ chrome.storage.local['links'] = {
 - 可叠加「包含当前筛选」（标签/搜索/日期）与「仅公众号链接」（hostname == mp.weixin.qq.com）
 - 已生成后勾选「包含当前筛选」时，筛选变化自动按原区间重算（`state.exportMode` 记忆区间）
 
+## 界面与交互规范
+
+- **时间筛选快捷区间一致**：管理页（`manage.html` / `manage.js`）中不同位置的时间筛选功能（如顶部日期筛选浮层 `#datePopover` 与右侧导出抽屉 `#exportRangePills` 等），其时间区间快捷选项的文案、范围定义及计算口径必须保持一致；新增或修改任一处的快捷区间时，需同步检查并更新其余位置。
+
 ## 测试
 
 - 运行核心逻辑单元测试（Node 18+ 原生 `node:test`，无外部依赖）：

@@ -252,6 +252,7 @@
     </div>
     <div class="drawer-body">
       <div class="drawer-pills" id="exportRangePills">
+        <button class="btn btn-sm" data-r="24h">过去 24 小时</button>
         <button class="btn btn-sm" data-r="today">今日</button>
         <button class="btn btn-sm" data-r="yesterday">昨日</button>
         <button class="btn btn-sm" data-r="week">本周</button>
@@ -413,6 +414,20 @@
               <button type="button" data-val="comfortable">书摘卡片</button>
               <button type="button" data-val="compact">紧凑模式</button>
             </div>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="settings-group-title">导出汇总</div>
+          <div>
+            <label class="field-label" for="sExportPrefix">一级标题前缀</label>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input class="input" id="sExportPrefix" placeholder="E-Deli 收藏" maxlength="60">
+              <button type="button" class="btn btn-sm" id="sExportPrefixReset" style="flex-shrink:0;">恢复默认</button>
+            </div>
+            <p class="settings-desc" style="margin-top:6px;">
+              用于按日、按周及自定义区间导出的一级标题，如 <code># 前缀 · 2026-11-25 周三</code>；留空则使用默认前缀「E-Deli 收藏」。
+            </p>
           </div>
         </div>
 
